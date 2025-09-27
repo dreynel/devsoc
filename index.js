@@ -4,28 +4,45 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
-// app.use(cors());
+const allowedOrigins = [
+  "https://legendary-cat-097c25.netlify.app",
+  "https://dulcet-druid-ebce06.netlify.app"
+];
 
-// Or allow only your frontend
 app.use(cors({
-    origin: "https://legendary-cat-097c25.netlify.app",
-    methods: ["GET", "POST"]
-  }));
+  origin: function(origin, callback){
+    // allow requests with no origin (like Postman or server-to-server)
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.indexOf(origin) === -1){
+      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ["GET", "POST"]
+}));
 
 app.use(bodyParser.json());
 
+// MongoDB connection
+const mongoURI = process.env.MONGODB_URI;
+if (!mongoURI) {
+  console.error("❌ MONGODB_URI is not defined in environment variables");
+  process.exit(1);
+}
 
-
-// MongoDB connection (with dbdevsoc as database name)
-mongoose.connect("mongodb+srv://bjohnlenard_db_user:LaXMU2UBzDstjOiw@cluster0.7up5ery.mongodb.net/dbdevsoc?retryWrites=true&w=majority&appName=Cluster0", {
+mongoose.connect(mongoURI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log("✅ Connected to MongoDB Atlas (dbdevsoc)"))
-.catch((err) => console.error("❌ MongoDB connection error:", err));
+.then(() => console.log("✅ Connected to MongoDB Atlas"))
+.catch((err) => {
+  console.error("❌ MongoDB connection error:", err);
+  process.exit(1);
+});
 
 // Schema & Model
 const studentSchema = new mongoose.Schema({
@@ -51,31 +68,16 @@ app.post("/register", async (req, res) => {
   const { firstName, lastName, address, course, contact, email, message } = req.body;
 
   try {
-    // Check duplicate email/contact
     const existing = await Student.findOne({
-      $or: [{ email: email }, { contact: contact }],
+      $or: [{ email }, { contact }],
     });
 
     if (existing) {
-      if (existing.email === email) {
-        return res.json({ success: false, error: "Email already registered." });
-      }
-      if (existing.contact === contact) {
-        return res.json({ success: false, error: "Contact number already registered." });
-      }
+      if (existing.email === email) return res.json({ success: false, error: "Email already registered." });
+      if (existing.contact === contact) return res.json({ success: false, error: "Contact number already registered." });
     }
 
-    // Insert new student
-    const student = new Student({
-      firstName,
-      lastName,
-      address,
-      course,
-      contact,
-      email,
-      message,
-    });
-
+    const student = new Student({ firstName, lastName, address, course, contact, email, message });
     await student.save();
     res.json({ success: true });
   } catch (err) {
@@ -97,5 +99,5 @@ app.get("/students", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`✅ Backend running on http://localhost:${PORT}`);
+  console.log(`✅ Backend running on port ${PORT}`);
 });
